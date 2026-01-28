@@ -1,0 +1,6 @@
+{
+  "Name": "Uipath_Jenkins_CICD_Demo",
+  "ProjectType": "Process",
+  "Description": "Blank Process",
+  "MainFile": "Main.xaml"
+}
