@@ -9,10 +9,9 @@ pipeline {
         // UiPath Orchestrator
         UIPATH_ORCH_URL = 'https://cloud.uipath.com'
         UIPATH_ORCH_TENANT = 'DefaultTenant'
-        UIPATH_FOLDER = 'UnAttended'           // Folder in Orchestrator
-        UIPATH_ENV = 'UnAttended'              // Robot Environment name (must match Orchestrator)
+        UIPATH_FOLDER = 'UnAttended'
 
-        // Jenkins Credential ID for Orchestrator API
+        // Jenkins Credential ID
         UIPATH_CRED = 'APIUserKey'
     }
 
@@ -23,6 +22,9 @@ pipeline {
 
     stages {
 
+        // ----------------------
+        // Checkout Stage
+        // ----------------------
         stage('Checkout') {
             steps {
                 checkout scm
@@ -30,13 +32,12 @@ pipeline {
             }
         }
 
+        // ----------------------
+        // Pack Stage
+        // ----------------------
         stage('Pack') {
             steps {
                 script {
-                    // Get short Git hash
-                    def gitHash = bat(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
-
-                    echo "Git Hash : ${gitHash}"
                     echo "Build No : ${env.BUILD_NUMBER}"
 
                     UiPathPack(
@@ -44,7 +45,7 @@ pipeline {
                         outputPath: "Output\\${env.BUILD_NUMBER}",
                         version: [
                             $class: 'ManualVersionEntry',
-                            version: "${MAJOR}.${MINOR}.${env.BUILD_NUMBER}.${gitHash}"
+                            version: "${MAJOR}.${MINOR}.${env.BUILD_NUMBER}.0"  // numeric version
                         ],
                         useOrchestrator: false,
                         traceLevel: 'None'
@@ -53,6 +54,9 @@ pipeline {
             }
         }
 
+        // ----------------------
+        // Deploy to Orchestrator
+        // ----------------------
         stage('Deploy') {
             steps {
                 UiPathDeploy(
@@ -60,17 +64,16 @@ pipeline {
                     orchestratorTenant: "${UIPATH_ORCH_TENANT}",
                     credentials: "${UIPATH_CRED}",
                     packagePath: "Output\\${env.BUILD_NUMBER}",
-                    folderName: "${UIPATH_FOLDER}",       // ✅ Mandatory
-                    environments: "${UIPATH_ENV}",        // ✅ Must match Orchestrator environment
-                    traceLevel: 'None',
-                    entryPointPaths: 'Main.xaml',
-                    createProcess: true
+                    folderName: "${UIPATH_FOLDER}",
+                    traceLevel: 'None'
                 )
             }
         }
-
     }
 
+    // ----------------------
+    // Post Actions
+    // ----------------------
     post {
         success {
             echo '✅ Successfully deployed to Orchestrator'
