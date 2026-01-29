@@ -2,17 +2,17 @@ pipeline {
     agent any
 
     environment {
-        // Set any environment variables here
-        UIPATH_PROJECT = 'MainProject'
-        WORKSPACE_DIR = "C:/ProgramData/Jenkins/.jenkins/workspace/Uipath_Jenkins_CICD_main"
-        PACKAGE_OUTPUT = "${WORKSPACE_DIR}/Packages"
-        PROJECT_FOLDER = "${WORKSPACE_DIR}/${UIPATH_PROJECT}"
+        WORKSPACE_DIR = "${env.WORKSPACE}"
+        UIPATH_PROJECT = "MainProject"          // name of your UiPath project folder
+        PACKAGE_OUTPUT = "${env.WORKSPACE}/Packages" // where the .nupkg will go
+        VERSION = "1.0.${env.BUILD_NUMBER}"     // dynamic versioning
     }
 
     stages {
 
         stage('Checkout SCM') {
             steps {
+                echo "Checking out Git repository..."
                 checkout([
                     $class: 'GitSCM',
                     branches: [[name: 'main']],
@@ -31,14 +31,9 @@ pipeline {
                 echo "Packing UiPath project..."
                 script {
                     UiPathPack(
-                        project: env.UIPATH_PROJECT,
-                        folder: env.PROJECT_FOLDER,
-                        output: env.PACKAGE_OUTPUT,
-                        version: [
-                            major: 1,
-                            minor: 0,
-                            patch: env.BUILD_NUMBER.toInteger()
-                        ]
+                        path: "${WORKSPACE_DIR}/${UIPATH_PROJECT}",  // full path to project folder
+                        version: "${VERSION}",                        // version string
+                        outputPath: "${PACKAGE_OUTPUT}"               // optional: output folder
                     )
                 }
             }
@@ -46,25 +41,25 @@ pipeline {
 
         stage('Test') {
             steps {
-                echo "Running UiPath Tests..."
-                // Example: add UiPathTest step if needed
-                // UiPathTest(project: env.UIPATH_PROJECT, folder: env.PROJECT_FOLDER)
+                echo "Running Tests (if any)..."
+                // Add UiPathTest step here if you have automated tests
+                // e.g., UiPathTest(path: "${WORKSPACE_DIR}/${UIPATH_PROJECT}")
             }
         }
 
         stage('Deploy to UAT') {
             steps {
                 echo "Deploying to UAT..."
-                // Example: add UiPathDeploy step if needed
-                // UiPathDeploy(environment: 'UAT', package: "${PACKAGE_OUTPUT}/${UIPATH_PROJECT}.nupkg")
+                // Add UiPathDeploy step here for UAT
+                // e.g., UiPathDeploy(packagePath: "${PACKAGE_OUTPUT}/${UIPATH_PROJECT}.${VERSION}.nupkg", environment: "UAT")
             }
         }
 
         stage('Deploy to Production') {
             steps {
                 echo "Deploying to Production..."
-                // Example: add UiPathDeploy step if needed
-                // UiPathDeploy(environment: 'Production', package: "${PACKAGE_OUTPUT}/${UIPATH_PROJECT}.nupkg")
+                // Add UiPathDeploy step here for Production
+                // e.g., UiPathDeploy(packagePath: "${PACKAGE_OUTPUT}/${UIPATH_PROJECT}.${VERSION}.nupkg", environment: "Production")
             }
         }
     }
@@ -75,7 +70,7 @@ pipeline {
             cleanWs()
         }
         success {
-            echo "Pipeline completed successfully!"
+            echo "Pipeline succeeded!"
         }
         failure {
             echo "Pipeline failed!"
