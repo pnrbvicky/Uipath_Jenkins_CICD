@@ -1,33 +1,35 @@
 pipeline {
     agent any
 
-    // Environment Variables
+    /*************** ENVIRONMENT VARIABLES ****************/
     environment {
+        // Versioning
         MAJOR = '1'
         MINOR = '0'
 
         // UiPath Orchestrator (Cloud)
-        UIPATH_ORCH_URL = 'https://cloud.uipath.com'
+        UIPATH_ORCH_ADDRESS = 'https://cloud.uipath.com'
         UIPATH_ORCH_LOGICAL_NAME = 'devellwmqjpn'
         UIPATH_ORCH_TENANT_NAME = 'DefaultTenant'
         UIPATH_ORCH_FOLDER_NAME = 'UnAttended'
     }
 
+    /*********************** STAGES ************************/
     stages {
 
-        stage('Preparing') {
+        stage('Prepare') {
             steps {
-                echo "Jenkins Home : ${env.JENKINS_HOME}"
-                echo "Jenkins URL  : ${env.JENKINS_URL}"
-                echo "Build Number: ${env.BUILD_NUMBER}"
-                echo "Job Name    : ${env.JOB_NAME}"
-                echo "Branch Name : ${env.BRANCH_NAME}"
+                echo "Jenkins Home   : ${env.JENKINS_HOME}"
+                echo "Jenkins URL    : ${env.JENKINS_URL}"
+                echo "Job Name       : ${env.JOB_NAME}"
+                echo "Build Number   : ${env.BUILD_NUMBER}"
+                echo "Branch Name    : ${env.BRANCH_NAME}"
 
                 checkout scm
             }
         }
 
-        stage('Build') {
+        stage('Build (Pack UiPath Project)') {
             steps {
                 echo "Packaging UiPath project..."
 
@@ -46,17 +48,17 @@ pipeline {
 
         stage('Test') {
             steps {
-                echo 'Testing stage (placeholder)'
+                echo 'Test stage placeholder (add UiPath Test Automation if needed)'
             }
         }
 
-        stage('Deploy to UAT') {
+        stage('Deploy to UiPath Orchestrator (UAT)') {
             steps {
                 echo "Deploying package to UiPath Orchestrator..."
 
                 UiPathDeploy(
                     packagePath: "Output\\${env.BUILD_NUMBER}",
-                    orchestratorUrl: "${UIPATH_ORCH_URL}",
+                    orchestratorAddress: "${UIPATH_ORCH_ADDRESS}",
                     orchestratorTenant: "${UIPATH_ORCH_TENANT_NAME}",
                     folderName: "${UIPATH_ORCH_FOLDER_NAME}",
                     credentials: Token(
@@ -75,19 +77,21 @@ pipeline {
                 branch 'main'
             }
             steps {
-                echo 'Production deployment placeholder'
+                echo 'Production deployment placeholder (add approval gate here)'
             }
         }
     }
 
+    /*********************** OPTIONS ***********************/
     options {
         timeout(time: 80, unit: 'MINUTES')
         skipDefaultCheckout()
     }
 
+    /*********************** POST **************************/
     post {
         success {
-            echo 'UiPath deployment completed successfully!'
+            echo 'UiPath CI/CD pipeline completed successfully 🎉'
         }
         failure {
             echo "FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER}"
