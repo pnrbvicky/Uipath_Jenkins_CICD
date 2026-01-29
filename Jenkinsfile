@@ -28,22 +28,21 @@ pipeline {
         stage('Pack') {
             steps {
                 script {
-                    // Capture Git hash safely
+                    // Get Git hash
                     def gitHash = bat(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
                     echo "Git Hash: ${gitHash}"
                     echo "Build No: ${env.BUILD_NUMBER}"
 
-                    // Prepare package output path (safe Windows path)
+                    // Safe package path
                     def packagePath = "${PROJECT_PATH}\\Output\\${env.BUILD_NUMBER}_${gitHash}"
                     echo "Package Path: ${packagePath}"
 
-                    // UiPath Pack
                     UiPathPack(
                         projectJsonPath: "${PROJECT_PATH}\\project.json",
                         outputPath: packagePath,
                         version: [
                             $class: 'ManualVersionEntry',
-                            version: "1.0.${env.BUILD_NUMBER}"  // numeric only
+                            version: "1.0.${env.BUILD_NUMBER}" // numeric only
                         ],
                         useOrchestrator: false,
                         traceLevel: 'None'
@@ -56,9 +55,10 @@ pipeline {
         stage('Deploy') {
             steps {
                 script {
-                    // Use the same Git hash as in Pack stage
+                    // Use same Git hash from Pack
                     def gitHash = bat(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
                     def packagePath = "${PROJECT_PATH}\\Output\\${env.BUILD_NUMBER}_${gitHash}"
+                    echo "Deploying package from: ${packagePath}"
 
                     UiPathDeploy(
                         orchestratorAddress: env.ORCHESTRATOR_URL,
