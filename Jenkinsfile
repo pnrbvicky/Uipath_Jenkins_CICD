@@ -2,32 +2,28 @@ pipeline {
     agent any
 
     environment {
-        // UiPath CLI version
-        UIPATH_CLI_VERSION = "Windows.25.10.3"
+        WORKSPACE_DIR = "${env.WORKSPACE}"
+        PACKAGE_OUTPUT = "${env.WORKSPACE}/Packages"
+        UIPATH_CLI = "${env.WORKSPACE}/CLI/cached/UiPath.CLI.Windows/25.10.3/tools/uipcli.dll"
+        TIMESTAMP = "${new Date().format('yyyyMMddHHmmss')}"
+        PACKAGE_VERSION = "1.0.${BUILD_NUMBER}-b${TIMESTAMP}"
     }
 
     options {
-        timeout(time: 1, unit: 'HOURS')
-        skipDefaultCheckout(true)
+        timeout(time: 1, unit: 'HOURS') // pipeline timeout
     }
 
     stages {
 
-        stage('Preparing') {
+        stage('Checkout') {
             steps {
-                echo "Jenkins Home: ${JENKINS_HOME}"
-                echo "Jenkins URL: ${JENKINS_URL}"
-                echo "Job Number: ${BUILD_NUMBER}"
-                echo "Job Name: ${JOB_NAME}"
-
+                echo "Checking out source code..."
                 checkout([
                     $class: 'GitSCM',
-                    branches: [[name: "main"]],
-                    doGenerateSubmoduleConfigurations: false,
-                    extensions: [],
+                    branches: [[name: 'main']],
                     userRemoteConfigs: [[
-                        url: "https://github.com/pnrbvicky/Uipath_Jenkins_CICD.git",
-                        credentialsId: "GitCred"
+                        url: 'https://github.com/pnrbvicky/Uipath_Jenkins_CICD.git',
+                        credentialsId: 'GitCred'
                     ]]
                 ])
             }
@@ -35,53 +31,42 @@ pipeline {
 
         stage('Build') {
             steps {
-                script {
-                    // Safe UiPath package version
-                    def timestamp = new Date().format("yyyyMMddHHmm")
-                    env.PACKAGE_VERSION = "1.0.${BUILD_NUMBER}-b${timestamp}"
-                    echo "Building project with version: ${env.PACKAGE_VERSION}"
+                echo "Building project with version ${PACKAGE_VERSION}"
 
-                    // Pack the UiPath project
-                    UiPathPack(
-                        projectPath: "${WORKSPACE}",
-                        outputPath: "${WORKSPACE}/Packages",
-                        version: env.PACKAGE_VERSION,
-                        cliVersion: "${UIPATH_CLI_VERSION}"
-                    )
-                }
+                // Make sure output folder exists
+                bat "mkdir \"${PACKAGE_OUTPUT}\""
+
+                // Run UiPath CLI pack command
+                bat """
+                dotnet "${UIPATH_CLI}" pack "${WORKSPACE_DIR}" --output "${PACKAGE_OUTPUT}" --version ${PACKAGE_VERSION}
+                """
             }
         }
 
         stage('Test') {
             steps {
-                echo "Testing workflow..."
-                // Add your test steps here if needed
+                echo "Running tests..."
+                // Example: run test workflows via CLI or call test scripts
+                // bat "dotnet \"${UIPATH_CLI}\" test ..."
+                echo "Tests skipped (add your test commands here)"
             }
         }
 
         stage('Deploy to UAT') {
             steps {
-                script {
-                    echo "Deploying ${env.BRANCH_NAME} to UAT"
-                    UiPathDeploy(
-                        packagePath: "${WORKSPACE}/Packages",
-                        environmentName: "UAT",
-                        cliVersion: "${UIPATH_CLI_VERSION}"
-                    )
-                }
+                echo "Deploying package to UAT..."
+                // Example CLI deploy command
+                // bat "dotnet \"${UIPATH_CLI}\" deploy --package \"${PACKAGE_OUTPUT}/YourPackage.nupkg\" --environment UAT"
+                echo "Deploy to UAT skipped (add your deploy commands here)"
             }
         }
 
         stage('Deploy to Production') {
             steps {
-                script {
-                    echo "Deploying ${env.BRANCH_NAME} to Production"
-                    UiPathDeploy(
-                        packagePath: "${WORKSPACE}/Packages",
-                        environmentName: "Production",
-                        cliVersion: "${UIPATH_CLI_VERSION}"
-                    )
-                }
+                echo "Deploying package to Production..."
+                // Example CLI deploy command
+                // bat "dotnet \"${UIPATH_CLI}\" deploy --package \"${PACKAGE_OUTPUT}/YourPackage.nupkg\" --environment Production"
+                echo "Deploy to Production skipped (add your deploy commands here)"
             }
         }
     }
@@ -89,10 +74,10 @@ pipeline {
     post {
         always {
             cleanWs()
-            echo "Build finished. Job URL: ${BUILD_URL}"
+            echo "Pipeline finished. Job URL: ${env.BUILD_URL}"
         }
         failure {
-            echo "FAILED: Job '${JOB_NAME} [${BUILD_NUMBER}]'"
+            echo "FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]'"
         }
     }
 }
