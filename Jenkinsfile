@@ -2,18 +2,16 @@ pipeline {
     agent any
 
     environment {
-        MAJOR = 1
-        MINOR = 0
-        UIPATH_ORCH_URL = 'https://cloud.uipath.com'
-        ORCH_TENANT = 'DefaultTenant'
-        ORCH_FOLDER = 'UnAttended'
-        ORCH_ENV = 'UnAttended'
-        ORCH_CRED = 'APIUserKey' // Make sure this is the SelectEntry credential ID, not string
+        ORCHESTRATOR_URL = 'https://cloud.uipath.com'
+        ORCHESTRATOR_TENANT = 'DefaultTenant'
+        ORCHESTRATOR_FOLDER = 'UnAttended'
+        CREDENTIALS_ID = 'APIUserKey'
+        ENTRY_POINT = 'Main.xaml'
+        ENVIRONMENT_NAME = 'UnAttended'
     }
 
     stages {
-
-        stage('Checkout') {
+        stage('Checkout SCM') {
             steps {
                 checkout([$class: 'GitSCM',
                     branches: [[name: '*/main']],
@@ -22,29 +20,33 @@ pipeline {
                         credentialsId: 'GitCred'
                     ]]
                 ])
-                echo "✅ Code checked out"
+                echo '✅ Code checked out'
             }
         }
 
         stage('Pack') {
             steps {
                 script {
-                    // Get short Git hash
+                    // Capture Git hash correctly
                     def gitHash = bat(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
                     echo "Git Hash: ${gitHash}"
                     echo "Build No: ${env.BUILD_NUMBER}"
 
+                    // Prepare package output path
+                    def packagePath = "Output\\${env.BUILD_NUMBER}_${gitHash}"
+
                     // UiPath Pack
                     UiPathPack(
                         projectJsonPath: 'project.json',
-                        outputPath: "Output\\${env.BUILD_NUMBER}_${gitHash}",
+                        outputPath: packagePath,
                         version: [
                             $class: 'ManualVersionEntry',
-                            version: "${MAJOR}.${MINOR}.${env.BUILD_NUMBER}" // ✅ numeric only
+                            version: "1.0.${env.BUILD_NUMBER}"  // numeric only
                         ],
                         useOrchestrator: false,
                         traceLevel: 'None'
                     )
+                    echo "✅ Package created at ${packagePath}"
                 }
             }
         }
@@ -52,27 +54,37 @@ pipeline {
         stage('Deploy') {
             steps {
                 script {
+                    // Use same package path from Pack
+                    def gitHash = bat(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+                    def packagePath = "Output\\${env.BUILD_NUMBER}_${gitHash}"
+
                     UiPathDeploy(
-                        orchestratorAddress: "${UIPATH_ORCH_URL}",
-                        orchestratorTenant: "${ORCH_TENANT}",
-                        folderName: "${ORCH_FOLDER}",
-                        environments: [env.ORCH_ENV],             // List of environments
-                        entryPointPaths: ['Main.xaml'],           // List of entry points
-                        credentials: credentials(ORCH_CRED),     // Must be SelectEntry type in Jenkins
-                        packagePath: "Output\\${env.BUILD_NUMBER}_${gitHash}",
+                        orchestratorAddress: env.ORCHESTRATOR_URL,
+                        orchestratorTenant: env.ORCHESTRATOR_TENANT,
+                        folderName: env.ORCHESTRATOR_FOLDER,
+                        environments: env.ENVIRONMENT_NAME,
+                        entryPointPaths: env.ENTRY_POINT,
+                        packagePath: packagePath,
+                        credentials: env.CREDENTIALS_ID,
                         createProcess: true,
                         traceLevel: 'None'
                     )
+                    echo "✅ Deployment successful"
                 }
             }
         }
-
     }
 
     post {
         always {
             cleanWs()
-            echo "❌ Deployment finished (success or failure)"
+            echo '🧹 Workspace cleaned'
+        }
+        success {
+            echo '🎉 Pipeline completed successfully'
+        }
+        failure {
+            echo '❌ Deployment failed'
         }
     }
 }
