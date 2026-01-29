@@ -3,7 +3,6 @@ pipeline {
 
     /*************** ENVIRONMENT VARIABLES ****************/
     environment {
-        // Versioning
         MAJOR = '1'
         MINOR = '0'
 
@@ -12,6 +11,7 @@ pipeline {
         UIPATH_ORCH_LOGICAL_NAME = 'devellwmqjpn'
         UIPATH_ORCH_TENANT_NAME = 'DefaultTenant'
         UIPATH_ORCH_FOLDER_NAME = 'UnAttended'
+        UIPATH_ORCH_ENVIRONMENT = 'DEV'
     }
 
     /*********************** STAGES ************************/
@@ -19,11 +19,9 @@ pipeline {
 
         stage('Prepare') {
             steps {
-                echo "Jenkins Home   : ${env.JENKINS_HOME}"
-                echo "Jenkins URL    : ${env.JENKINS_URL}"
-                echo "Job Name       : ${env.JOB_NAME}"
-                echo "Build Number   : ${env.BUILD_NUMBER}"
-                echo "Branch Name    : ${env.BRANCH_NAME}"
+                echo "Job Name     : ${env.JOB_NAME}"
+                echo "Build Number : ${env.BUILD_NUMBER}"
+                echo "Branch Name  : ${env.BRANCH_NAME}"
 
                 checkout scm
             }
@@ -48,19 +46,20 @@ pipeline {
 
         stage('Test') {
             steps {
-                echo 'Test stage placeholder (add UiPath Test Automation if needed)'
+                echo 'Test stage placeholder'
             }
         }
 
-        stage('Deploy to UiPath Orchestrator (UAT)') {
+        stage('Deploy to UiPath Orchestrator') {
             steps {
-                echo "Deploying package to UiPath Orchestrator..."
+                echo "Deploying to UiPath Orchestrator..."
 
                 UiPathDeploy(
                     packagePath: "Output\\${env.BUILD_NUMBER}",
                     orchestratorAddress: "${UIPATH_ORCH_ADDRESS}",
                     orchestratorTenant: "${UIPATH_ORCH_TENANT_NAME}",
                     folderName: "${UIPATH_ORCH_FOLDER_NAME}",
+                    environments: "${UIPATH_ORCH_ENVIRONMENT}",
                     credentials: Token(
                         accountName: "${UIPATH_ORCH_LOGICAL_NAME}",
                         credentialsId: 'APIUserKey'
@@ -69,15 +68,6 @@ pipeline {
                     createProcess: true,
                     traceLevel: 'None'
                 )
-            }
-        }
-
-        stage('Deploy to Production') {
-            when {
-                branch 'main'
-            }
-            steps {
-                echo 'Production deployment placeholder (add approval gate here)'
             }
         }
     }
@@ -91,7 +81,7 @@ pipeline {
     /*********************** POST **************************/
     post {
         success {
-            echo 'UiPath CI/CD pipeline completed successfully 🎉'
+            echo 'UiPath deployment completed successfully 🎉'
         }
         failure {
             echo "FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER}"
