@@ -1,5 +1,5 @@
 pipeline {
-    agent { label 'windows' }
+    agent { label 'windows' }  // Ensures it runs on a Windows node
 
     environment {
         MAJOR = '1'
@@ -11,6 +11,7 @@ pipeline {
     }
 
     stages {
+
         stage('Preparing') {
             steps {
                 echo "Jenkins Home: ${env.JENKINS_HOME}"
@@ -25,8 +26,9 @@ pipeline {
         stage('Build') {
             steps {
                 script {
-                    // Safe SemVer versioning: MAJOR.MINOR.BUILD_NUMBER
-                    env.PACKAGE_VERSION = "${MAJOR}.${MINOR}.${env.BUILD_NUMBER}"
+                    // Create a unique version using BUILD_NUMBER + timestamp
+                    def timestamp = new Date().format("yyyyMMddHHmmss")
+                    env.PACKAGE_VERSION = "${MAJOR}.${MINOR}.${env.BUILD_NUMBER}.${timestamp}"
                     echo "Building project with version: ${env.PACKAGE_VERSION}"
 
                     UiPathPack(
@@ -49,18 +51,18 @@ pipeline {
         stage('Deploy to UAT') {
             steps {
                 script {
-                    echo "Deploying ${BRANCH_NAME} to UAT"
+                    echo "Deploying ${env.BRANCH_NAME} to UAT"
+
                     UiPathDeploy(
                         packagePath: "Output\\${env.BUILD_NUMBER}",
                         orchestratorAddress: "${UIPATH_ORCH_URL}",
                         orchestratorTenant: "${UIPATH_ORCH_TENANT_NAME}",
                         folderName: "${UIPATH_ORCH_FOLDER_NAME}",
                         environments: 'DEV',
-                        credentials: [$class: 'TokenAuthenticationEntry', accountName: "${UIPATH_ORCH_LOGICAL_NAME}", credentialsId: 'APIUserKey'],
-                        createProcess: true,
+                        credentials: Token(accountName: "${UIPATH_ORCH_LOGICAL_NAME}", credentialsId: 'APIUserKey'),
                         traceLevel: 'None',
-                        entryPointPaths: 'Main.xaml'
-                        // overwrite: true  // Optional: replace old package if needed
+                        entryPointPaths: 'Main.xaml',
+                        overwrite: false  // Optional: set true if you want to replace existing packages
                     )
                 }
             }
@@ -69,22 +71,23 @@ pipeline {
         stage('Deploy to Production') {
             steps {
                 script {
-                    echo "Deploying ${BRANCH_NAME} to Production"
+                    echo "Deploying ${env.BRANCH_NAME} to Production"
+
                     UiPathDeploy(
                         packagePath: "Output\\${env.BUILD_NUMBER}",
                         orchestratorAddress: "${UIPATH_ORCH_URL}",
                         orchestratorTenant: "${UIPATH_ORCH_TENANT_NAME}",
                         folderName: "${UIPATH_ORCH_FOLDER_NAME}",
                         environments: 'PROD',
-                        credentials: [$class: 'TokenAuthenticationEntry', accountName: "${UIPATH_ORCH_LOGICAL_NAME}", credentialsId: 'APIUserKey'],
-                        createProcess: true,
+                        credentials: Token(accountName: "${UIPATH_ORCH_LOGICAL_NAME}", credentialsId: 'APIUserKey'),
                         traceLevel: 'None',
-                        entryPointPaths: 'Main.xaml'
-                        // overwrite: true  // Optional
+                        entryPointPaths: 'Main.xaml',
+                        overwrite: false
                     )
                 }
             }
         }
+
     }
 
     options {
@@ -97,7 +100,7 @@ pipeline {
             echo 'Deployment completed successfully!'
         }
         failure {
-            echo "FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.BUILD_DISPLAY_URL})"
+            echo "FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.BUILD_URL})"
         }
         always {
             cleanWs()
