@@ -1,26 +1,16 @@
 pipeline {
-    agent { label 'windows' } // UiPath requires Windows agent
+    agent { label 'windows' }
 
-    // Environment Variables
     environment {
         MAJOR = '1'
         MINOR = '0'
-        // Orchestrator Services
         UIPATH_ORCH_URL = "https://cloud.uipath.com/"
         UIPATH_ORCH_LOGICAL_NAME = "devellwmqjpn"
         UIPATH_ORCH_TENANT_NAME = "DefaultTenant"
         UIPATH_ORCH_FOLDER_NAME = "UnAttended"
-        OUTPUT_PATH = "Output\\${env.BUILD_NUMBER}"
-    }
-
-    options {
-        timeout(time: 80, unit: 'MINUTES') // max pipeline time
-        skipDefaultCheckout() // we handle checkout manually
     }
 
     stages {
-
-        // 1️⃣ Preparing Stage
         stage('Preparing') {
             steps {
                 echo "Jenkins Home: ${env.JENKINS_HOME}"
@@ -28,20 +18,22 @@ pipeline {
                 echo "Job Number: ${env.BUILD_NUMBER}"
                 echo "Job Name: ${env.JOB_NAME}"
                 echo "Branch Name: ${env.BRANCH_NAME}"
-
                 checkout scm
             }
         }
 
-        // 2️⃣ Build Stage
         stage('Build') {
             steps {
-                echo "Building project in workspace: ${env.WORKSPACE}"
                 script {
+                    // Create a unique version using BUILD_NUMBER + timestamp
+                    def timestamp = new Date().format("yyyyMMddHHmmss")
+                    env.UNIQUE_VERSION = "${MAJOR}.${MINOR}.${env.BUILD_NUMBER}.${timestamp}"
+                    echo "Building project with version: ${env.UNIQUE_VERSION}"
+
                     UiPathPack(
-                        outputPath: "${OUTPUT_PATH}",
+                        outputPath: "Output\\${env.BUILD_NUMBER}",
                         projectJsonPath: "project.json",
-                        version: [$class: 'ManualVersionEntry', version: "${MAJOR}.${MINOR}.${env.BUILD_NUMBER}"],
+                        version: [$class: 'ManualVersionEntry', version: env.UNIQUE_VERSION],
                         useOrchestrator: false,
                         traceLevel: 'None'
                     )
@@ -49,21 +41,18 @@ pipeline {
             }
         }
 
-        // 3️⃣ Test Stage
         stage('Test') {
             steps {
                 echo "Testing workflow..."
-                // Add real test commands here if needed
             }
         }
 
-        // 4️⃣ Deploy to UAT
         stage('Deploy to UAT') {
             steps {
-                echo "Deploying ${BRANCH_NAME} to UAT"
                 script {
+                    echo "Deploying ${BRANCH_NAME} to UAT"
                     UiPathDeploy(
-                        packagePath: "${OUTPUT_PATH}",
+                        packagePath: "Output\\${env.BUILD_NUMBER}",
                         orchestratorAddress: "${UIPATH_ORCH_URL}",
                         orchestratorTenant: "${UIPATH_ORCH_TENANT_NAME}",
                         folderName: "${UIPATH_ORCH_FOLDER_NAME}",
@@ -72,18 +61,18 @@ pipeline {
                         createProcess: true,
                         traceLevel: 'None',
                         entryPointPaths: 'Main.xaml'
+                        // overwrite: true  // optional if you want to replace old package
                     )
                 }
             }
         }
 
-        // 5️⃣ Deploy to Production
         stage('Deploy to Production') {
             steps {
-                echo "Deploying ${BRANCH_NAME} to Production"
                 script {
+                    echo "Deploying ${BRANCH_NAME} to Production"
                     UiPathDeploy(
-                        packagePath: "${OUTPUT_PATH}",
+                        packagePath: "Output\\${env.BUILD_NUMBER}",
                         orchestratorAddress: "${UIPATH_ORCH_URL}",
                         orchestratorTenant: "${UIPATH_ORCH_TENANT_NAME}",
                         folderName: "${UIPATH_ORCH_FOLDER_NAME}",
@@ -92,15 +81,21 @@ pipeline {
                         createProcess: true,
                         traceLevel: 'None',
                         entryPointPaths: 'Main.xaml'
+                        // overwrite: true  // optional
                     )
                 }
             }
         }
     }
 
+    options {
+        timeout(time: 80, unit: 'MINUTES')
+        skipDefaultCheckout()
+    }
+
     post {
         success {
-            echo "Deployment completed successfully!"
+            echo 'Deployment completed successfully!'
         }
         failure {
             echo "FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.BUILD_DISPLAY_URL})"
