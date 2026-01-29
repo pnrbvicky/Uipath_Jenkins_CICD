@@ -1,39 +1,45 @@
 pipeline {
     agent any
 
-    /*************** ENVIRONMENT VARIABLES ****************/
     environment {
+        // Versioning
         MAJOR = '1'
         MINOR = '0'
 
         // UiPath Orchestrator (Cloud)
-        UIPATH_ORCH_ADDRESS = 'https://cloud.uipath.com'
-        UIPATH_ORCH_LOGICAL_NAME = 'devellwmqjpn'
-        UIPATH_ORCH_TENANT_NAME = 'DefaultTenant'
-        UIPATH_ORCH_FOLDER_NAME = 'UnAttended'
-        UIPATH_ORCH_ENVIRONMENT = 'DEV'
+        UIPATH_ORCH_URL = "https://cloud.uipath.com/"
+        UIPATH_ORCH_LOGICAL_NAME = "anupaminc"          // change as per your org
+        UIPATH_ORCH_TENANT_NAME  = "Descriptify"        // change as per your tenant
+        UIPATH_ORCH_FOLDER_NAME  = "Default"            // change as per your folder
     }
 
-    /*********************** STAGES ************************/
     stages {
 
+        /* =======================
+           PREPARE
+        ======================= */
         stage('Prepare') {
             steps {
-                echo "Job Name     : ${env.JOB_NAME}"
-                echo "Build Number : ${env.BUILD_NUMBER}"
-                echo "Branch Name  : ${env.BRANCH_NAME}"
+                echo "Jenkins Home       : ${env.JENKINS_HOME}"
+                echo "Jenkins URL        : ${env.JENKINS_URL}"
+                echo "Job Name           : ${env.JOB_NAME}"
+                echo "Build Number       : ${env.BUILD_NUMBER}"
+                echo "Git Branch         : ${env.BRANCH_NAME}"
 
                 checkout scm
             }
         }
 
-        stage('Build (Pack UiPath Project)') {
+        /* =======================
+           BUILD (PACK)
+        ======================= */
+        stage('Build') {
             steps {
-                echo "Packaging UiPath project..."
+                echo "Packing UiPath project..."
 
                 UiPathPack(
-                    outputPath: "Output\\${env.BUILD_NUMBER}",
                     projectJsonPath: "project.json",
+                    outputPath: "Output\\${env.BUILD_NUMBER}",
                     version: [
                         $class: 'ManualVersionEntry',
                         version: "${MAJOR}.${MINOR}.${env.BUILD_NUMBER}"
@@ -44,47 +50,66 @@ pipeline {
             }
         }
 
+        /* =======================
+           TEST (OPTIONAL)
+        ======================= */
         stage('Test') {
             steps {
-                echo 'Test stage placeholder'
+                echo "No automated tests configured yet"
             }
         }
 
-        stage('Deploy to UiPath Orchestrator') {
+        /* =======================
+           DEPLOY TO DEV / UAT
+        ======================= */
+        stage('Deploy to Orchestrator') {
             steps {
-                echo "Deploying to UiPath Orchestrator..."
+                echo "Deploying package to UiPath Orchestrator..."
 
                 UiPathDeploy(
                     packagePath: "Output\\${env.BUILD_NUMBER}",
-                    orchestratorAddress: "${UIPATH_ORCH_ADDRESS}",
+                    orchestratorAddress: "${UIPATH_ORCH_URL}",
                     orchestratorTenant: "${UIPATH_ORCH_TENANT_NAME}",
                     folderName: "${UIPATH_ORCH_FOLDER_NAME}",
-                    environments: "${UIPATH_ORCH_ENVIRONMENT}",
+
+                    // REQUIRED (do not remove)
+                    environments: 'DEV',
+
                     credentials: Token(
                         accountName: "${UIPATH_ORCH_LOGICAL_NAME}",
                         credentialsId: 'APIUserKey'
                     ),
+
                     entryPointPaths: 'Main.xaml',
-                    createProcess: true,
                     traceLevel: 'None'
                 )
             }
         }
+
+        /* =======================
+           PROD (MANUAL LATER)
+        ======================= */
+        stage('Deploy to Production') {
+            when {
+                branch 'main'
+            }
+            steps {
+                echo "Production deployment can be added here"
+            }
+        }
     }
 
-    /*********************** OPTIONS ***********************/
     options {
         timeout(time: 80, unit: 'MINUTES')
         skipDefaultCheckout()
     }
 
-    /*********************** POST **************************/
     post {
         success {
-            echo 'UiPath deployment completed successfully 🎉'
+            echo "✅ UiPath CI/CD pipeline completed successfully"
         }
         failure {
-            echo "FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER}"
+            echo "❌ FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER}"
         }
         always {
             cleanWs()
