@@ -22,9 +22,6 @@ pipeline {
 
     stages {
 
-        // ----------------------
-        // Checkout Stage
-        // ----------------------
         stage('Checkout') {
             steps {
                 checkout scm
@@ -32,9 +29,6 @@ pipeline {
             }
         }
 
-        // ----------------------
-        // Pack Stage
-        // ----------------------
         stage('Pack') {
             steps {
                 script {
@@ -45,7 +39,7 @@ pipeline {
                         outputPath: "Output\\${env.BUILD_NUMBER}",
                         version: [
                             $class: 'ManualVersionEntry',
-                            version: "${MAJOR}.${MINOR}.${env.BUILD_NUMBER}.0"  // numeric version
+                            version: "${MAJOR}.${MINOR}.${env.BUILD_NUMBER}.0"
                         ],
                         useOrchestrator: false,
                         traceLevel: 'None'
@@ -54,9 +48,6 @@ pipeline {
             }
         }
 
-        // ----------------------
-        // Deploy to Orchestrator
-        // ----------------------
         stage('Deploy') {
             steps {
                 UiPathDeploy(
@@ -65,15 +56,15 @@ pipeline {
                     credentials: "${UIPATH_CRED}",
                     packagePath: "Output\\${env.BUILD_NUMBER}",
                     folderName: "${UIPATH_FOLDER}",
+                    environments: "${UIPATH_FOLDER}",           // Environment name (can be same as folder)
+                    entryPointPaths: 'Main.xaml',               // Entry point file
+                    createProcess: true,                        // Create process if not exists
                     traceLevel: 'None'
                 )
             }
         }
     }
 
-    // ----------------------
-    // Post Actions
-    // ----------------------
     post {
         success {
             echo '✅ Successfully deployed to Orchestrator'
