@@ -2,14 +2,15 @@ pipeline {
     agent any
 
     environment {
-        // UiPath CLI path (update if different)
-        UIPATH_CLI = "${WORKSPACE}/CLI/cached/UiPath.CLI.Windows/25.10.3/tools/uipcli.dll"
+        // Make sure UiPath CLI is in PATH
+        PATH = "C:\\Program Files (x86)\\UiPath\\Studio\\UiPath;${env.PATH}"
 
-        // Package output folder
-        PACKAGE_OUTPUT = "${WORKSPACE}/Packages"
+        // Set project and output paths
+        PROJECT_PATH = "${WORKSPACE}"
+        OUTPUT_PATH = "${WORKSPACE}\\Packages"
 
-        // Project version (example)
-        PACKAGE_VERSION = "1.0.${BUILD_NUMBER}-b${BUILD_ID}"
+        // Version for the package
+        VERSION = "1.0.${BUILD_NUMBER}-b${BUILD_ID}"
     }
 
     options {
@@ -18,61 +19,78 @@ pipeline {
     }
 
     stages {
-
         stage('Checkout') {
             steps {
-                echo "Checking out source code..."
+                echo 'Checking out source code...'
                 checkout scm
             }
         }
 
         stage('Build') {
             steps {
-                echo "Building project with version ${PACKAGE_VERSION}"
-
+                echo "Building UiPath project version ${env.VERSION}"
                 script {
-                    // Detect OS and use correct command
-                    if (isUnix()) {
-                        sh "dotnet \"${UIPATH_CLI}\" pack \"${WORKSPACE}\" --output \"${PACKAGE_OUTPUT}\" --version ${PACKAGE_VERSION}"
-                    } else {
-                        bat "dotnet \"${UIPATH_CLI}\" pack \"${WORKSPACE}\" --output \"${PACKAGE_OUTPUT}\" --version ${PACKAGE_VERSION}"
-                    }
+                    // Use correct UiPathPack parameters
+                    uipathPack(
+                        projectPath: env.PROJECT_PATH,
+                        outputPath: env.OUTPUT_PATH,
+                        version: env.VERSION,
+                        publish: true // optional, publish package after build
+                    )
                 }
             }
         }
 
         stage('Test') {
             steps {
-                echo "Running tests..."
-                // Add your UiPath test commands here, if any
+                echo 'Running tests...'
+                script {
+                    // Run UiPath test (modify parameters as needed)
+                    uipathTest(
+                        projectPath: env.PROJECT_PATH,
+                        robotType: 'Unattended'
+                    )
+                }
             }
         }
 
         stage('Deploy to UAT') {
             steps {
-                echo "Deploying to UAT..."
-                // Add deployment steps here
+                echo 'Deploying package to UAT environment...'
+                script {
+                    uipathDeploy(
+                        packagePath: "${env.OUTPUT_PATH}\\${env.VERSION}.nupkg",
+                        environment: 'UAT',
+                        orchestratorUrl: 'https://platform.uipath.com/',
+                        tenant: 'YourTenantName',
+                        folder: 'UAT_Folder',
+                        credentialsId: 'OrchestratorCreds'
+                    )
+                }
             }
         }
 
         stage('Deploy to Production') {
             steps {
-                echo "Deploying to Production..."
-                // Add deployment steps here
+                input message: "Approve deployment to Production?"
+                echo 'Deploying package to Production environment...'
+                script {
+                    uipathDeploy(
+                        packagePath: "${env.OUTPUT_PATH}\\${env.VERSION}.nupkg",
+                        environment: 'Production',
+                        orchestratorUrl: 'https://platform.uipath.com/',
+                        tenant: 'YourTenantName',
+                        folder: 'Production_Folder',
+                        credentialsId: 'OrchestratorCreds'
+                    )
+                }
             }
         }
     }
 
     post {
-        success {
-            echo "Pipeline succeeded!"
-        }
-        failure {
-            echo "Pipeline failed!"
-        }
-        always {
-            cleanWs()
-            echo "Workspace cleaned"
-        }
+        success { echo 'Pipeline completed successfully!' }
+        failure { echo 'Pipeline failed!' }
+        always { cleanWs() }
     }
 }
