@@ -2,40 +2,35 @@ pipeline {
     agent any
 
     environment {
-        // Make sure UiPath CLI is in PATH
-        PATH = "C:\\Program Files (x86)\\UiPath\\Studio\\UiPath;${env.PATH}"
-
-        // Set project and output paths
-        PROJECT_PATH = "${WORKSPACE}"
-        OUTPUT_PATH = "${WORKSPACE}\\Packages"
-
-        // Version for the package
-        VERSION = "1.0.${BUILD_NUMBER}-b${BUILD_ID}"
+        // Example: update according to your system
+        UIPATH_ORCHESTRATOR_URL = 'https://your-orchestrator-url'
+        UIPATH_ORCHESTRATOR_TENANT = 'your-tenant'
+        UIPATH_ORCHESTRATOR_USER = 'your-username'
+        UIPATH_ORCHESTRATOR_PASSWORD = 'your-password'
     }
 
     options {
         timeout(time: 1, unit: 'HOURS')
+        timestamps()
         buildDiscarder(logRotator(numToKeepStr: '10'))
     }
 
     stages {
-        stage('Checkout') {
+
+        stage('Checkout SCM') {
             steps {
-                echo 'Checking out source code...'
                 checkout scm
             }
         }
 
-        stage('Build') {
+        stage('Build / Pack') {
             steps {
-                echo "Building UiPath project version ${env.VERSION}"
+                echo "Packing UiPath project..."
                 script {
-                    // Use correct UiPathPack parameters
-                    uipathPack(
-                        projectPath: env.PROJECT_PATH,
-                        outputPath: env.OUTPUT_PATH,
-                        version: env.VERSION,
-                        publish: true // optional, publish package after build
+                    UiPathPack(
+                        projectPath: 'C:/ProgramData/Jenkins/.jenkins/workspace/Uipath_Jenkins_CICD_main/MainProject/MainProject.xaml', 
+                        outputPath: 'C:/ProgramData/Jenkins/.jenkins/workspace/Uipath_Jenkins_CICD_main/Packages',
+                        version: '1.0.0-b${BUILD_NUMBER}'
                     )
                 }
             }
@@ -43,12 +38,15 @@ pipeline {
 
         stage('Test') {
             steps {
-                echo 'Running tests...'
+                echo "Running UiPath Tests..."
                 script {
-                    // Run UiPath test (modify parameters as needed)
-                    uipathTest(
-                        projectPath: env.PROJECT_PATH,
-                        robotType: 'Unattended'
+                    UiPathTest(
+                        projectPath: 'C:/ProgramData/Jenkins/.jenkins/workspace/Uipath_Jenkins_CICD_main/MainProject/MainProject.xaml',
+                        testSetName: 'AllTests',
+                        orchestratorUrl: "${UIPATH_ORCHESTRATOR_URL}",
+                        tenant: "${UIPATH_ORCHESTRATOR_TENANT}",
+                        username: "${UIPATH_ORCHESTRATOR_USER}",
+                        password: "${UIPATH_ORCHESTRATOR_PASSWORD}"
                     )
                 }
             }
@@ -56,15 +54,15 @@ pipeline {
 
         stage('Deploy to UAT') {
             steps {
-                echo 'Deploying package to UAT environment...'
+                echo "Deploying to UAT..."
                 script {
-                    uipathDeploy(
-                        packagePath: "${env.OUTPUT_PATH}\\${env.VERSION}.nupkg",
-                        environment: 'UAT',
-                        orchestratorUrl: 'https://platform.uipath.com/',
-                        tenant: 'YourTenantName',
-                        folder: 'UAT_Folder',
-                        credentialsId: 'OrchestratorCreds'
+                    UiPathDeploy(
+                        packagePath: 'C:/ProgramData/Jenkins/.jenkins/workspace/Uipath_Jenkins_CICD_main/Packages/MainProject.1.0.0-b${BUILD_NUMBER}.nupkg',
+                        environmentName: 'UAT',
+                        orchestratorUrl: "${UIPATH_ORCHESTRATOR_URL}",
+                        tenant: "${UIPATH_ORCHESTRATOR_TENANT}",
+                        username: "${UIPATH_ORCHESTRATOR_USER}",
+                        password: "${UIPATH_ORCHESTRATOR_PASSWORD}"
                     )
                 }
             }
@@ -72,16 +70,16 @@ pipeline {
 
         stage('Deploy to Production') {
             steps {
-                input message: "Approve deployment to Production?"
-                echo 'Deploying package to Production environment...'
+                input message: 'Approve deployment to Production?'
+                echo "Deploying to Production..."
                 script {
-                    uipathDeploy(
-                        packagePath: "${env.OUTPUT_PATH}\\${env.VERSION}.nupkg",
-                        environment: 'Production',
-                        orchestratorUrl: 'https://platform.uipath.com/',
-                        tenant: 'YourTenantName',
-                        folder: 'Production_Folder',
-                        credentialsId: 'OrchestratorCreds'
+                    UiPathDeploy(
+                        packagePath: 'C:/ProgramData/Jenkins/.jenkins/workspace/Uipath_Jenkins_CICD_main/Packages/MainProject.1.0.0-b${BUILD_NUMBER}.nupkg',
+                        environmentName: 'Production',
+                        orchestratorUrl: "${UIPATH_ORCHESTRATOR_URL}",
+                        tenant: "${UIPATH_ORCHESTRATOR_TENANT}",
+                        username: "${UIPATH_ORCHESTRATOR_USER}",
+                        password: "${UIPATH_ORCHESTRATOR_PASSWORD}"
                     )
                 }
             }
@@ -89,8 +87,14 @@ pipeline {
     }
 
     post {
-        success { echo 'Pipeline completed successfully!' }
-        failure { echo 'Pipeline failed!' }
-        always { cleanWs() }
+        success {
+            echo "Pipeline completed successfully!"
+        }
+        failure {
+            echo "Pipeline failed!"
+        }
+        always {
+            cleanWs()
+        }
     }
 }
