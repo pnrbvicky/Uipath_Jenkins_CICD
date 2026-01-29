@@ -25,21 +25,27 @@ pipeline {
         stage('Checkout') {
             steps {
                 checkout scm
-                echo "Code checked out"
+                echo "✅ Code checked out"
             }
         }
 
         stage('Pack') {
             steps {
                 script {
-                    echo "Build No : ${env.BUILD_NUMBER}"
+                    def gitHash = bat(
+                        script: 'git rev-parse --short HEAD',
+                        returnStdout: true
+                    ).trim()
+
+                    echo "Git Hash: ${gitHash}"
+                    echo "Build No: ${env.BUILD_NUMBER}"
 
                     UiPathPack(
                         projectJsonPath: 'project.json',
                         outputPath: "Output\\${env.BUILD_NUMBER}",
                         version: [
                             $class: 'ManualVersionEntry',
-                            version: "${MAJOR}.${MINOR}.${env.BUILD_NUMBER}.0"
+                            version: "${MAJOR}.${MINOR}.${env.BUILD_NUMBER}.${gitHash}"
                         ],
                         useOrchestrator: false,
                         traceLevel: 'None'
@@ -53,12 +59,12 @@ pipeline {
                 UiPathDeploy(
                     orchestratorAddress: "${UIPATH_ORCH_URL}",
                     orchestratorTenant: "${UIPATH_ORCH_TENANT}",
-                    credentials: "${UIPATH_CRED}",
+                    credentials: credentials("${UIPATH_CRED}"),  // ✅ Corrected
                     packagePath: "Output\\${env.BUILD_NUMBER}",
                     folderName: "${UIPATH_FOLDER}",
-                    environments: "${UIPATH_FOLDER}",           // Environment name (can be same as folder)
-                    entryPointPaths: 'Main.xaml',               // Entry point file
-                    createProcess: true,                        // Create process if not exists
+                    environments: "${UIPATH_FOLDER}",
+                    entryPointPaths: 'Main.xaml',
+                    createProcess: true,
                     traceLevel: 'None'
                 )
             }
