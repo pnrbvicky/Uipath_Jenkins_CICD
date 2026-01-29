@@ -8,6 +8,7 @@ pipeline {
         CREDENTIALS_ID = 'APIUserKey'
         ENTRY_POINT = 'Main.xaml'
         ENVIRONMENT_NAME = 'UnAttended'
+        PROJECT_PATH = 'C:\\ProgramData\\Jenkins\\.jenkins\\workspace\\Uipath_Jenkins_CICD_main'
     }
 
     stages {
@@ -27,17 +28,18 @@ pipeline {
         stage('Pack') {
             steps {
                 script {
-                    // Capture Git hash correctly
+                    // Capture Git hash safely
                     def gitHash = bat(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
                     echo "Git Hash: ${gitHash}"
                     echo "Build No: ${env.BUILD_NUMBER}"
 
-                    // Prepare package output path
-                    def packagePath = "Output\\${env.BUILD_NUMBER}_${gitHash}"
+                    // Prepare package output path (safe Windows path)
+                    def packagePath = "${PROJECT_PATH}\\Output\\${env.BUILD_NUMBER}_${gitHash}"
+                    echo "Package Path: ${packagePath}"
 
                     // UiPath Pack
                     UiPathPack(
-                        projectJsonPath: 'project.json',
+                        projectJsonPath: "${PROJECT_PATH}\\project.json",
                         outputPath: packagePath,
                         version: [
                             $class: 'ManualVersionEntry',
@@ -54,9 +56,9 @@ pipeline {
         stage('Deploy') {
             steps {
                 script {
-                    // Use same package path from Pack
+                    // Use the same Git hash as in Pack stage
                     def gitHash = bat(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
-                    def packagePath = "Output\\${env.BUILD_NUMBER}_${gitHash}"
+                    def packagePath = "${PROJECT_PATH}\\Output\\${env.BUILD_NUMBER}_${gitHash}"
 
                     UiPathDeploy(
                         orchestratorAddress: env.ORCHESTRATOR_URL,
