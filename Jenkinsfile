@@ -11,7 +11,7 @@ pipeline {
         UIPATH_ORCH_TENANT = 'DefaultTenant'
         UIPATH_FOLDER = 'UnAttended'
 
-        // Jenkins Credential ID (UPDATED)
+        // Jenkins Credential ID for Orchestrator API
         UIPATH_CRED = 'APIUserKey'
     }
 
@@ -22,13 +22,19 @@ pipeline {
 
     stages {
 
+        // ----------------------
+        // Checkout Stage
+        // ----------------------
         stage('Checkout') {
             steps {
                 checkout scm
-                echo "Code checked out"
+                echo "✅ Code checked out"
             }
         }
 
+        // ----------------------
+        // Build / Pack Stage
+        // ----------------------
         stage('Pack') {
             steps {
                 script {
@@ -37,8 +43,8 @@ pipeline {
                         returnStdout: true
                     ).trim()
 
-                    echo "Git Hash : ${gitHash}"
-                    echo "Build No : ${env.BUILD_NUMBER}"
+                    echo "Git Hash   : ${gitHash}"
+                    echo "Build No   : ${env.BUILD_NUMBER}"
 
                     UiPathPack(
                         projectJsonPath: 'project.json',
@@ -54,20 +60,28 @@ pipeline {
             }
         }
 
+        // ----------------------
+        // Deploy to Orchestrator
+        // ----------------------
         stage('Deploy') {
             steps {
                 UiPathDeploy(
                     orchestratorAddress: "${UIPATH_ORCH_URL}",
                     orchestratorTenant: "${UIPATH_ORCH_TENANT}",
                     credentials: "${UIPATH_CRED}",
-                    packagesPath: "Output\\${env.BUILD_NUMBER}",
+                    packagePath: "Output\\${env.BUILD_NUMBER}",
                     environments: "${UIPATH_FOLDER}",
-                    traceLevel: 'None'
+                    traceLevel: 'None',
+                    entryPointPaths: 'Main.xaml',
+                    createProcess: true
                 )
             }
         }
     }
 
+    // ----------------------
+    // Post Actions
+    // ----------------------
     post {
         success {
             echo '✅ Successfully deployed to Orchestrator'
