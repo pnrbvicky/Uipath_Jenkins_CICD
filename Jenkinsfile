@@ -1,113 +1,78 @@
 pipeline {
-	    agent any
-	
+    agent any
 
-	        // Environment Variables
-	        environment {
-	        MAJOR = '1'
-	        MINOR = '0'
-	        //Orchestrator Services
-	        UIPATH_ORCH_URL = "https://cloud.uipath.com/"
-	        UIPATH_ORCH_LOGICAL_NAME = "devellwmqjpn"
-	        UIPATH_ORCH_TENANT_NAME = "DefaultTenant"
-	        UIPATH_ORCH_FOLDER_NAME = "UnAttended"
-	    }
-	
+    environment {
+        // UiPath CLI path (update if different)
+        UIPATH_CLI = "${WORKSPACE}/CLI/cached/UiPath.CLI.Windows/25.10.3/tools/uipcli.dll"
 
-	    stages {
-	
+        // Package output folder
+        PACKAGE_OUTPUT = "${WORKSPACE}/Packages"
 
-	        // Printing Basic Information
-	        stage('Preparing'){
-	            steps {
-	                echo "Jenkins Home ${env.JENKINS_HOME}"
-	                echo "Jenkins URL ${env.JENKINS_URL}"
-	                echo "Jenkins JOB Number ${env.BUILD_NUMBER}"
-	                echo "Jenkins JOB Name ${env.JOB_NAME}"
-	                echo "GitHub BranhName ${env.BRANCH_NAME}"
-	                checkout scm
-	
+        // Project version (example)
+        PACKAGE_VERSION = "1.0.${BUILD_NUMBER}-b${BUILD_ID}"
+    }
 
-	            }
-	        }
-	
+    options {
+        timeout(time: 1, unit: 'HOURS')
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+    }
 
-	         // Build Stages
-	        stage('Build') {
-	            steps {
-	                echo "Building..with ${WORKSPACE}"
-	                UiPathPack (
-	                      outputPath: "Output\\${env.BUILD_NUMBER}",
-	                      projectJsonPath: "project.json",
-	                      version: [$class: 'ManualVersionEntry', version: "${MAJOR}.${MINOR}.${env.BUILD_NUMBER}"],
-	                      useOrchestrator: false,
-						  traceLevel: 'None'
-	        )
-	            }
-	        }
-	         // Test Stages
-	        stage('Test') {
-	            steps {
-	                echo 'Testing..the workflow...'
-	            }
-	        }
-	
+    stages {
 
-	         // Deploy Stages
-	        stage('Deploy to UAT') {
-	            steps {
-	                echo "Deploying ${BRANCH_NAME} to UAT "
-	                UiPathDeploy (
-	                packagePath: "Output\\${env.BUILD_NUMBER}",
-	                orchestratorAddress: "${UIPATH_ORCH_URL}",
-	                orchestratorTenant: "${UIPATH_ORCH_TENANT_NAME}",
-	                folderName: "${UIPATH_ORCH_FOLDER_NAME}",
-	                environments: 'DEV',
-	                //credentials: [$class: 'UserPassAuthenticationEntry', credentialsId: 'APIUserKey']
-	                credentials: Token(accountName: "${UIPATH_ORCH_LOGICAL_NAME}", credentialsId: 'APIUserKey'), 
-					traceLevel: 'None',
-					entryPointPaths: 'Main.xaml'
-	
+        stage('Checkout') {
+            steps {
+                echo "Checking out source code..."
+                checkout scm
+            }
+        }
 
-	        )
-	            }
-	        }
-	
+        stage('Build') {
+            steps {
+                echo "Building project with version ${PACKAGE_VERSION}"
 
-	
+                script {
+                    // Detect OS and use correct command
+                    if (isUnix()) {
+                        sh "dotnet \"${UIPATH_CLI}\" pack \"${WORKSPACE}\" --output \"${PACKAGE_OUTPUT}\" --version ${PACKAGE_VERSION}"
+                    } else {
+                        bat "dotnet \"${UIPATH_CLI}\" pack \"${WORKSPACE}\" --output \"${PACKAGE_OUTPUT}\" --version ${PACKAGE_VERSION}"
+                    }
+                }
+            }
+        }
 
-	         // Deploy to Production Step
-	        stage('Deploy to Production') {
-	            steps {
-	                echo 'Deploy to Production'
-	                }
-	            }
-	    }
-	
+        stage('Test') {
+            steps {
+                echo "Running tests..."
+                // Add your UiPath test commands here, if any
+            }
+        }
 
-	    // Options
-	    options {
-	        // Timeout for pipeline
-	        timeout(time:80, unit:'MINUTES')
-	        skipDefaultCheckout()
-	    }
-	
+        stage('Deploy to UAT') {
+            steps {
+                echo "Deploying to UAT..."
+                // Add deployment steps here
+            }
+        }
 
-	
+        stage('Deploy to Production') {
+            steps {
+                echo "Deploying to Production..."
+                // Add deployment steps here
+            }
+        }
+    }
 
-	    // 
-	    post {
-	        success {
-	            echo 'Deployment has been completed!'
-	        }
-	        failure {
-	          echo "FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.JOB_DISPLAY_URL})"
-	        }
-	        always {
-	            /* Clean workspace if success */
-	            cleanWs()
-	        }
-	    }
-	
-
-	}
+    post {
+        success {
+            echo "Pipeline succeeded!"
+        }
+        failure {
+            echo "Pipeline failed!"
+        }
+        always {
+            cleanWs()
+            echo "Workspace cleaned"
+        }
+    }
+}
