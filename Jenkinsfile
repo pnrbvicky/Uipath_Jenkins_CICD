@@ -1,42 +1,52 @@
 pipeline {
-    agent { label 'windows' }  // Ensures it runs on a Windows node
+    agent any
 
     environment {
-        MAJOR = '1'
-        MINOR = '0'
-        UIPATH_ORCH_URL = "https://cloud.uipath.com/"
-        UIPATH_ORCH_LOGICAL_NAME = "devellwmqjpn"
-        UIPATH_ORCH_TENANT_NAME = "DefaultTenant"
-        UIPATH_ORCH_FOLDER_NAME = "UnAttended"
+        // UiPath CLI version
+        UIPATH_CLI_VERSION = "Windows.25.10.3"
+    }
+
+    options {
+        timeout(time: 1, unit: 'HOURS')
+        skipDefaultCheckout(true)
     }
 
     stages {
 
         stage('Preparing') {
             steps {
-                echo "Jenkins Home: ${env.JENKINS_HOME}"
-                echo "Jenkins URL: ${env.JENKINS_URL}"
-                echo "Job Number: ${env.BUILD_NUMBER}"
-                echo "Job Name: ${env.JOB_NAME}"
-                echo "Branch Name: ${env.BRANCH_NAME}"
-                checkout scm
+                echo "Jenkins Home: ${JENKINS_HOME}"
+                echo "Jenkins URL: ${JENKINS_URL}"
+                echo "Job Number: ${BUILD_NUMBER}"
+                echo "Job Name: ${JOB_NAME}"
+
+                checkout([
+                    $class: 'GitSCM',
+                    branches: [[name: "main"]],
+                    doGenerateSubmoduleConfigurations: false,
+                    extensions: [],
+                    userRemoteConfigs: [[
+                        url: "https://github.com/pnrbvicky/Uipath_Jenkins_CICD.git",
+                        credentialsId: "GitCred"
+                    ]]
+                ])
             }
         }
 
         stage('Build') {
             steps {
                 script {
-                    // Create a unique version using BUILD_NUMBER + timestamp
-                    def timestamp = new Date().format("yyyyMMddHHmmss")
-                    env.PACKAGE_VERSION = "${MAJOR}.${MINOR}.${env.BUILD_NUMBER}.${timestamp}"
+                    // Safe UiPath package version
+                    def timestamp = new Date().format("yyyyMMddHHmm")
+                    env.PACKAGE_VERSION = "1.0.${BUILD_NUMBER}-b${timestamp}"
                     echo "Building project with version: ${env.PACKAGE_VERSION}"
 
+                    // Pack the UiPath project
                     UiPathPack(
-                        outputPath: "Output\\${env.BUILD_NUMBER}",
-                        projectJsonPath: "project.json",
-                        version: [$class: 'ManualVersionEntry', version: env.PACKAGE_VERSION],
-                        useOrchestrator: false,
-                        traceLevel: 'None'
+                        projectPath: "${WORKSPACE}",
+                        outputPath: "${WORKSPACE}/Packages",
+                        version: env.PACKAGE_VERSION,
+                        cliVersion: "${UIPATH_CLI_VERSION}"
                     )
                 }
             }
@@ -45,6 +55,7 @@ pipeline {
         stage('Test') {
             steps {
                 echo "Testing workflow..."
+                // Add your test steps here if needed
             }
         }
 
@@ -52,17 +63,10 @@ pipeline {
             steps {
                 script {
                     echo "Deploying ${env.BRANCH_NAME} to UAT"
-
                     UiPathDeploy(
-                        packagePath: "Output\\${env.BUILD_NUMBER}",
-                        orchestratorAddress: "${UIPATH_ORCH_URL}",
-                        orchestratorTenant: "${UIPATH_ORCH_TENANT_NAME}",
-                        folderName: "${UIPATH_ORCH_FOLDER_NAME}",
-                        environments: 'DEV',
-                        credentials: Token(accountName: "${UIPATH_ORCH_LOGICAL_NAME}", credentialsId: 'APIUserKey'),
-                        traceLevel: 'None',
-                        entryPointPaths: 'Main.xaml',
-                        overwrite: false  // Optional: set true if you want to replace existing packages
+                        packagePath: "${WORKSPACE}/Packages",
+                        environmentName: "UAT",
+                        cliVersion: "${UIPATH_CLI_VERSION}"
                     )
                 }
             }
@@ -72,38 +76,23 @@ pipeline {
             steps {
                 script {
                     echo "Deploying ${env.BRANCH_NAME} to Production"
-
                     UiPathDeploy(
-                        packagePath: "Output\\${env.BUILD_NUMBER}",
-                        orchestratorAddress: "${UIPATH_ORCH_URL}",
-                        orchestratorTenant: "${UIPATH_ORCH_TENANT_NAME}",
-                        folderName: "${UIPATH_ORCH_FOLDER_NAME}",
-                        environments: 'PROD',
-                        credentials: Token(accountName: "${UIPATH_ORCH_LOGICAL_NAME}", credentialsId: 'APIUserKey'),
-                        traceLevel: 'None',
-                        entryPointPaths: 'Main.xaml',
-                        overwrite: false
+                        packagePath: "${WORKSPACE}/Packages",
+                        environmentName: "Production",
+                        cliVersion: "${UIPATH_CLI_VERSION}"
                     )
                 }
             }
         }
-
-    }
-
-    options {
-        timeout(time: 80, unit: 'MINUTES')
-        skipDefaultCheckout()
     }
 
     post {
-        success {
-            echo 'Deployment completed successfully!'
-        }
-        failure {
-            echo "FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.BUILD_URL})"
-        }
         always {
             cleanWs()
+            echo "Build finished. Job URL: ${BUILD_URL}"
+        }
+        failure {
+            echo "FAILED: Job '${JOB_NAME} [${BUILD_NUMBER}]'"
         }
     }
 }
