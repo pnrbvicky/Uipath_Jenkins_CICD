@@ -2,61 +2,66 @@ pipeline {
     agent any
 
     environment {
-        // Version control
+        // Versioning
         MAJOR = '1'
         MINOR = '0'
 
-        // UiPath Orchestrator config
-        UIPATH_ORCH_URL = "https://cloud.uipath.com/"
-        UIPATH_ORCH_LOGICAL_NAME = "devellwmqjpn"      // your account logical name
-        UIPATH_ORCH_TENANT_NAME = "DefaultTenant"    // tenant name
-        UIPATH_ORCH_FOLDER_NAME = "UnAttended"        // modern folder
+        // UiPath Orchestrator
+        UIPATH_ORCH_URL = 'https://cloud.uipath.com'
+        UIPATH_ORCH_TENANT = 'YOUR_TENANT_NAME'
+        UIPATH_FOLDER = 'UnAttended'
+
+        // Jenkins Credential ID (UPDATED)
+        UIPATH_CRED = 'APIUserKey'
     }
 
     options {
-        timeout(time: 80, unit: 'MINUTES')
+        timeout(time: 60, unit: 'MINUTES')
+        skipDefaultCheckout()
     }
 
     stages {
 
-        stage('Prepare') {
+        stage('Checkout') {
             steps {
-                echo "Job       : ${env.JOB_NAME}"
-                echo "Build No  : ${env.BUILD_NUMBER}"
-                echo "Workspace : ${env.WORKSPACE}"
                 checkout scm
+                echo "Code checked out"
             }
         }
 
-        stage('Build') {
+        stage('Pack') {
             steps {
-                echo "Building UiPath package..."
+                script {
+                    def gitHash = bat(
+                        script: 'git rev-parse --short HEAD',
+                        returnStdout: true
+                    ).trim()
 
-                UiPathPack(
-                    projectJsonPath: "project.json",
-                    outputPath: "Output",
-                    version: [$class: 'ManualVersionEntry', version: "${MAJOR}.${MINOR}.${env.BUILD_NUMBER}"],
-                    useOrchestrator: false,
-                    traceLevel: 'None'
-                )
+                    echo "Git Hash : ${gitHash}"
+                    echo "Build No : ${env.BUILD_NUMBER}"
+
+                    UiPathPack(
+                        projectJsonPath: 'project.json',
+                        outputPath: "Output\\${env.BUILD_NUMBER}",
+                        version: [
+                            $class: 'ManualVersionEntry',
+                            version: "${MAJOR}.${MINOR}.${env.BUILD_NUMBER}.${gitHash}"
+                        ],
+                        useOrchestrator: false,
+                        traceLevel: 'None'
+                    )
+                }
             }
         }
 
-        stage('Deploy to Orchestrator') {
+        stage('Deploy') {
             steps {
-                echo "Deploying to UiPath Orchestrator..."
-
                 UiPathDeploy(
                     orchestratorAddress: "${UIPATH_ORCH_URL}",
-                    orchestratorTenant: "${UIPATH_ORCH_TENANT_NAME}",
-                    folderName: "${UIPATH_ORCH_FOLDER_NAME}",
-                    packagePath: "Output",
-                    credentials: Token(
-                        accountName: "${UIPATH_ORCH_LOGICAL_NAME}",
-                        credentialsId: "APIUserKey"
-                    ),
-                    createProcess: true,
-                    entryPointPaths: "Main.xaml",
+                    orchestratorTenant: "${UIPATH_ORCH_TENANT}",
+                    credentials: "${UIPATH_CRED}",
+                    packagesPath: "Output\\${env.BUILD_NUMBER}",
+                    environments: "${UIPATH_FOLDER}",
                     traceLevel: 'None'
                 )
             }
@@ -65,10 +70,10 @@ pipeline {
 
     post {
         success {
-            echo "✅ Deployment completed successfully"
+            echo '✅ Successfully deployed to Orchestrator'
         }
         failure {
-            echo "❌ Build failed"
+            echo '❌ Deployment failed'
         }
         always {
             cleanWs()
