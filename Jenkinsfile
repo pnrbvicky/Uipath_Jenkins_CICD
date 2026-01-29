@@ -1,79 +1,113 @@
 pipeline {
-    agent any
+	    agent any
+	
 
-    environment {
-        WORKSPACE_DIR = "${env.WORKSPACE}"
-        UIPATH_PROJECT = "MainProject"          // name of your UiPath project folder
-        PACKAGE_OUTPUT = "${env.WORKSPACE}/Packages" // where the .nupkg will go
-        VERSION = "1.0.${env.BUILD_NUMBER}"     // dynamic versioning
-    }
+	        // Environment Variables
+	        environment {
+	        MAJOR = '1'
+	        MINOR = '0'
+	        //Orchestrator Services
+	        UIPATH_ORCH_URL = "https://cloud.uipath.com/"
+	        UIPATH_ORCH_LOGICAL_NAME = "devellwmqjpn"
+	        UIPATH_ORCH_TENANT_NAME = "DefaultTenant"
+	        UIPATH_ORCH_FOLDER_NAME = "UnAttended"
+	    }
+	
 
-    stages {
+	    stages {
+	
 
-        stage('Checkout SCM') {
-            steps {
-                echo "Checking out Git repository..."
-                checkout([
-                    $class: 'GitSCM',
-                    branches: [[name: 'main']],
-                    doGenerateSubmoduleConfigurations: false,
-                    extensions: [],
-                    userRemoteConfigs: [[
-                        url: 'https://github.com/pnrbvicky/Uipath_Jenkins_CICD.git',
-                        credentialsId: 'GitCred'
-                    ]]
-                ])
-            }
-        }
+	        // Printing Basic Information
+	        stage('Preparing'){
+	            steps {
+	                echo "Jenkins Home ${env.JENKINS_HOME}"
+	                echo "Jenkins URL ${env.JENKINS_URL}"
+	                echo "Jenkins JOB Number ${env.BUILD_NUMBER}"
+	                echo "Jenkins JOB Name ${env.JOB_NAME}"
+	                echo "GitHub BranhName ${env.BRANCH_NAME}"
+	                checkout scm
+	
 
-        stage('Build / Pack') {
-            steps {
-                echo "Packing UiPath project..."
-                script {
-                    UiPathPack(
-                        path: "${WORKSPACE_DIR}/${UIPATH_PROJECT}",  // full path to project folder
-                        version: "${VERSION}",                        // version string
-                        outputPath: "${PACKAGE_OUTPUT}"               // optional: output folder
-                    )
-                }
-            }
-        }
+	            }
+	        }
+	
 
-        stage('Test') {
-            steps {
-                echo "Running Tests (if any)..."
-                // Add UiPathTest step here if you have automated tests
-                // e.g., UiPathTest(path: "${WORKSPACE_DIR}/${UIPATH_PROJECT}")
-            }
-        }
+	         // Build Stages
+	        stage('Build') {
+	            steps {
+	                echo "Building..with ${WORKSPACE}"
+	                UiPathPack (
+	                      outputPath: "Output\\${env.BUILD_NUMBER}",
+	                      projectJsonPath: "project.json",
+	                      version: [$class: 'ManualVersionEntry', version: "${MAJOR}.${MINOR}.${env.BUILD_NUMBER}"],
+	                      useOrchestrator: false,
+						  traceLevel: 'None'
+	        )
+	            }
+	        }
+	         // Test Stages
+	        stage('Test') {
+	            steps {
+	                echo 'Testing..the workflow...'
+	            }
+	        }
+	
 
-        stage('Deploy to UAT') {
-            steps {
-                echo "Deploying to UAT..."
-                // Add UiPathDeploy step here for UAT
-                // e.g., UiPathDeploy(packagePath: "${PACKAGE_OUTPUT}/${UIPATH_PROJECT}.${VERSION}.nupkg", environment: "UAT")
-            }
-        }
+	         // Deploy Stages
+	        stage('Deploy to UAT') {
+	            steps {
+	                echo "Deploying ${BRANCH_NAME} to UAT "
+	                UiPathDeploy (
+	                packagePath: "Output\\${env.BUILD_NUMBER}",
+	                orchestratorAddress: "${UIPATH_ORCH_URL}",
+	                orchestratorTenant: "${UIPATH_ORCH_TENANT_NAME}",
+	                folderName: "${UIPATH_ORCH_FOLDER_NAME}",
+	                environments: 'DEV',
+	                //credentials: [$class: 'UserPassAuthenticationEntry', credentialsId: 'APIUserKey']
+	                credentials: Token(accountName: "${UIPATH_ORCH_LOGICAL_NAME}", credentialsId: 'APIUserKey'), 
+					traceLevel: 'None',
+					entryPointPaths: 'Main.xaml'
+	
 
-        stage('Deploy to Production') {
-            steps {
-                echo "Deploying to Production..."
-                // Add UiPathDeploy step here for Production
-                // e.g., UiPathDeploy(packagePath: "${PACKAGE_OUTPUT}/${UIPATH_PROJECT}.${VERSION}.nupkg", environment: "Production")
-            }
-        }
-    }
+	        )
+	            }
+	        }
+	
 
-    post {
-        always {
-            echo "Cleaning workspace..."
-            cleanWs()
-        }
-        success {
-            echo "Pipeline succeeded!"
-        }
-        failure {
-            echo "Pipeline failed!"
-        }
-    }
-}
+	
+
+	         // Deploy to Production Step
+	        stage('Deploy to Production') {
+	            steps {
+	                echo 'Deploy to Production'
+	                }
+	            }
+	    }
+	
+
+	    // Options
+	    options {
+	        // Timeout for pipeline
+	        timeout(time:80, unit:'MINUTES')
+	        skipDefaultCheckout()
+	    }
+	
+
+	
+
+	    // 
+	    post {
+	        success {
+	            echo 'Deployment has been completed!'
+	        }
+	        failure {
+	          echo "FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.JOB_DISPLAY_URL})"
+	        }
+	        always {
+	            /* Clean workspace if success */
+	            cleanWs()
+	        }
+	    }
+	
+
+	}
