@@ -1,92 +1,112 @@
 pipeline {
-    agent any
+ agent any
 
-    environment {
-        ORCHESTRATOR_URL = 'https://cloud.uipath.com'
-        ORCHESTRATOR_TENANT = 'DefaultTenant'
-        ORCHESTRATOR_FOLDER = 'UnAttended'
-        CREDENTIALS_ID = 'APIUserKey'
-        ENTRY_POINT = 'Main.xaml'
-        ENVIRONMENT_NAME = 'UnAttended'
-        PROJECT_PATH = 'C:\\ProgramData\\Jenkins\\.jenkins\\workspace\\Uipath_Jenkins_CICD_main'
-    }
+    	        // Environment Variables
+	        environment {
+	        MAJOR = '1'
+	        MINOR = '0'
+	        //Orchestrator Services
+	        UIPATH_ORCH_URL = "https://cloud.uipath.com/"
+	        UIPATH_ORCH_LOGICAL_NAME = "devellwmqjpn"
+	        UIPATH_ORCH_TENANT_NAME = "DefaultTenant"
+	        UIPATH_ORCH_FOLDER_NAME = "UnAttended"
+	    }
+	
 
-    stages {
-        stage('Checkout SCM') {
-            steps {
-                checkout([$class: 'GitSCM',
-                    branches: [[name: '*/main']],
-                    userRemoteConfigs: [[
-                        url: 'https://github.com/pnrbvicky/Uipath_Jenkins_CICD.git',
-                        credentialsId: 'GitCred'
-                    ]]
-                ])
-                echo '✅ Code checked out'
-            }
-        }
+	    stages {
+	
 
-        stage('Pack') {
-            steps {
-                script {
-                    // Get Git hash
-                    def gitHash = bat(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
-                    echo "Git Hash: ${gitHash}"
-                    echo "Build No: ${env.BUILD_NUMBER}"
+	        // Printing Basic Information
+	        stage('Preparing'){
+	            steps {
+	                echo "Jenkins Home ${env.JENKINS_HOME}"
+	                echo "Jenkins URL ${env.JENKINS_URL}"
+	                echo "Jenkins JOB Number ${env.BUILD_NUMBER}"
+	                echo "Jenkins JOB Name ${env.JOB_NAME}"
+	                echo "GitHub BranhName ${env.BRANCH_NAME}"
+	                checkout scm
+	
 
-                    // Safe package path
-                    def packagePath = "${PROJECT_PATH}\\Output\\${env.BUILD_NUMBER}_${gitHash}"
-                    echo "Package Path: ${packagePath}"
+	            }
+	        }
+	
 
-                    UiPathPack(
-                        projectJsonPath: "${PROJECT_PATH}\\project.json",
-                        outputPath: packagePath,
-                        version: [
-                            $class: 'ManualVersionEntry',
-                            version: "1.0.${env.BUILD_NUMBER}" // numeric only
-                        ],
-                        useOrchestrator: false,
-                        traceLevel: 'None'
-                    )
-                    echo "✅ Package created at ${packagePath}"
-                }
-            }
-        }
+	         // Build Stages
+	        stage('Build') {
+	            steps {
+	                echo "Building..with ${WORKSPACE}"
+	                UiPathPack (
+                      outputPath: "Output\\${env.BUILD_NUMBER}",
+                      projectJsonPath: "project.json",
+                      version: [$class: 'ManualVersionEntry', version: "${MAJOR}.${MINOR}.${env.BUILD_NUMBER}"],
+                      useOrchestrator: false,
+					  traceLevel: 'None'
+        )
+	            }
+	        }
+	         // Test Stages
+	        stage('Test') {
+	            steps {
+	                echo 'Testing..the workflow...'
+	            }
+	        }
+	
 
-        stage('Deploy') {
-            steps {
-                script {
-                    // Use same Git hash from Pack
-                    def gitHash = bat(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
-                    def packagePath = "${PROJECT_PATH}\\Output\\${env.BUILD_NUMBER}_${gitHash}"
-                    echo "Deploying package from: ${packagePath}"
+	         // Deploy Stages
+	        stage('Deploy to UAT') {
+	            steps {
+	                echo "Deploying ${BRANCH_NAME} to UAT "
+                UiPathDeploy (
+                packagePath: "Output\\${env.BUILD_NUMBER}",
+                orchestratorAddress: "${UIPATH_ORCH_URL}",
+                orchestratorTenant: "${UIPATH_ORCH_TENANT_NAME}",
+                folderName: "${UIPATH_ORCH_FOLDER_NAME}",
+                environments: 'UnAttended',
+                //credentials: [$class: 'UserPassAuthenticationEntry', credentialsId: 'APIUserKey']
+                credentials: Token(accountName: "${UIPATH_ORCH_LOGICAL_NAME}", credentialsId: 'APIUserKey'), 
+				traceLevel: 'None',
+				entryPointPaths: 'Main.xaml'
+	
 
-                    UiPathDeploy(
-                        orchestratorAddress: env.ORCHESTRATOR_URL,
-                        orchestratorTenant: env.ORCHESTRATOR_TENANT,
-                        folderName: env.ORCHESTRATOR_FOLDER,
-                        environments: env.ENVIRONMENT_NAME,
-                        entryPointPaths: env.ENTRY_POINT,
-                        packagePath: packagePath,
-                        credentials: env.CREDENTIALS_ID,
-                        createProcess: true,
-                        traceLevel: 'None'
-                    )
-                    echo "✅ Deployment successful"
-                }
-            }
-        }
-    }
+	        )
+	            }
+	        }
+	
 
-    post {
-        always {
-            cleanWs()
-            echo '🧹 Workspace cleaned'
-        }
-        success {
-            echo '🎉 Pipeline completed successfully'
-        }
-        failure {
-            echo '❌ Deployment failed'
-        }
-    }
-}
+	
+
+	         // Deploy to Production Step
+	        stage('Deploy to Production') {
+	            steps {
+	                echo 'Deploy to Production'
+	                }
+	            }
+	    }
+	
+
+	    // Options
+	    options {
+	        // Timeout for pipeline
+	        timeout(time:80, unit:'MINUTES')
+	        skipDefaultCheckout()
+	    }
+	
+
+	
+
+	    // 
+	    post {
+	        success {
+	            echo 'Deployment has been completed!'
+	        }
+	        failure {
+	          echo "FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.JOB_DISPLAY_URL})"
+	        }
+	        always {
+	            /* Clean workspace if success */
+	            cleanWs()
+	        }
+	    }
+	
+
+	}
