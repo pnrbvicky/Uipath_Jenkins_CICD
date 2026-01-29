@@ -2,29 +2,26 @@ pipeline {
     agent any
 
     environment {
-        // Versioning
-        MAJOR = '1'
-        MINOR = '0'
-
-        // UiPath Orchestrator
+        MAJOR = 1
+        MINOR = 0
         UIPATH_ORCH_URL = 'https://cloud.uipath.com'
-        UIPATH_ORCH_TENANT = 'DefaultTenant'
-        UIPATH_FOLDER = 'UnAttended'
-
-        // Jenkins Credential ID
-        UIPATH_CRED = 'APIUserKey'
-    }
-
-    options {
-        timeout(time: 60, unit: 'MINUTES')
-        skipDefaultCheckout()
+        ORCH_TENANT = 'DefaultTenant'
+        ORCH_FOLDER = 'UnAttended'
+        ORCH_ENV = 'UnAttended'
+        ORCH_CRED = 'APIUserKey' // Make sure this is the SelectEntry credential ID, not string
     }
 
     stages {
 
         stage('Checkout') {
             steps {
-                checkout scm
+                checkout([$class: 'GitSCM',
+                    branches: [[name: '*/main']],
+                    userRemoteConfigs: [[
+                        url: 'https://github.com/pnrbvicky/Uipath_Jenkins_CICD.git',
+                        credentialsId: 'GitCred'
+                    ]]
+                ])
                 echo "✅ Code checked out"
             }
         }
@@ -32,20 +29,18 @@ pipeline {
         stage('Pack') {
             steps {
                 script {
-                    def gitHash = bat(
-                        script: 'git rev-parse --short HEAD',
-                        returnStdout: true
-                    ).trim()
-
+                    // Get short Git hash
+                    def gitHash = bat(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
                     echo "Git Hash: ${gitHash}"
                     echo "Build No: ${env.BUILD_NUMBER}"
 
+                    // UiPath Pack
                     UiPathPack(
                         projectJsonPath: 'project.json',
-                        outputPath: "Output\\${env.BUILD_NUMBER}",
+                        outputPath: "Output\\${env.BUILD_NUMBER}_${gitHash}",
                         version: [
                             $class: 'ManualVersionEntry',
-                            version: "${MAJOR}.${MINOR}.${env.BUILD_NUMBER}.${gitHash}"
+                            version: "${MAJOR}.${MINOR}.${env.BUILD_NUMBER}" // ✅ numeric only
                         ],
                         useOrchestrator: false,
                         traceLevel: 'None'
@@ -56,30 +51,28 @@ pipeline {
 
         stage('Deploy') {
             steps {
-                UiPathDeploy(
-                    orchestratorAddress: "${UIPATH_ORCH_URL}",
-                    orchestratorTenant: "${UIPATH_ORCH_TENANT}",
-                    credentials: credentials("${UIPATH_CRED}"),  // ✅ Corrected
-                    packagePath: "Output\\${env.BUILD_NUMBER}",
-                    folderName: "${UIPATH_FOLDER}",
-                    environments: "${UIPATH_FOLDER}",
-                    entryPointPaths: 'Main.xaml',
-                    createProcess: true,
-                    traceLevel: 'None'
-                )
+                script {
+                    UiPathDeploy(
+                        orchestratorAddress: "${UIPATH_ORCH_URL}",
+                        orchestratorTenant: "${ORCH_TENANT}",
+                        folderName: "${ORCH_FOLDER}",
+                        environments: [env.ORCH_ENV],             // List of environments
+                        entryPointPaths: ['Main.xaml'],           // List of entry points
+                        credentials: credentials(ORCH_CRED),     // Must be SelectEntry type in Jenkins
+                        packagePath: "Output\\${env.BUILD_NUMBER}_${gitHash}",
+                        createProcess: true,
+                        traceLevel: 'None'
+                    )
+                }
             }
         }
+
     }
 
     post {
-        success {
-            echo '✅ Successfully deployed to Orchestrator'
-        }
-        failure {
-            echo '❌ Deployment failed'
-        }
         always {
             cleanWs()
+            echo "❌ Deployment finished (success or failure)"
         }
     }
 }
