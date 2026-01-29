@@ -1,20 +1,18 @@
 pipeline {
     agent any
 
-    // Environment Variables
     environment {
         MAJOR = '1'
         MINOR = '0'
-        // Orchestrator Services
+        // Orchestrator Services - update as per your Orchestrator
         UIPATH_ORCH_URL = "https://cloud.uipath.com/"
-        UIPATH_ORCH_LOGICAL_NAME = "devellwmqjpn"  // replace with your Orchestrator logical name
-        UIPATH_ORCH_TENANT_NAME = "DefaultTenant" // replace with your tenant name
-        UIPATH_ORCH_FOLDER_NAME = "UnAttended"    // replace with your folder name
+        UIPATH_ORCH_LOGICAL_NAME = "devellwmqjpn"
+        UIPATH_ORCH_TENANT_NAME = "DefaultTenant"
+        UIPATH_ORCH_FOLDER_NAME = "UnAttended"
     }
 
     stages {
 
-        // Preparing stage
         stage('Prepare') {
             steps {
                 echo "Job       : ${env.JOB_NAME}/${env.BRANCH_NAME}"
@@ -24,22 +22,15 @@ pipeline {
             }
         }
 
-        // Build stage
         stage('Build') {
             steps {
                 echo "Building package..."
-
-                // Get short Git hash to create unique version
                 script {
-                    def gitHash = bat(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
-                    env.PACKAGE_VERSION = "${MAJOR}.${MINOR}.${env.BUILD_NUMBER}.${gitHash}"
-
-                    echo "Package version: ${env.PACKAGE_VERSION}"
-
+                    def gitHash = bat(script: "git rev-parse --short HEAD", returnStdout: true).trim()
                     UiPathPack(
                         outputPath: "Output\\${env.BUILD_NUMBER}",
                         projectJsonPath: "project.json",
-                        version: [$class: 'ManualVersionEntry', version: "${env.PACKAGE_VERSION}"],
+                        version: [$class: 'ManualVersionEntry', version: "${MAJOR}.${MINOR}.${env.BUILD_NUMBER}.${gitHash}"],
                         useOrchestrator: false,
                         traceLevel: 'None'
                     )
@@ -47,14 +38,12 @@ pipeline {
             }
         }
 
-        // Test stage
         stage('Test') {
             steps {
                 echo "Running tests (if any)..."
             }
         }
 
-        // Deploy to Orchestrator
         stage('Deploy to Orchestrator') {
             steps {
                 echo "Deploying package to Orchestrator..."
@@ -63,15 +52,15 @@ pipeline {
                     orchestratorAddress: "${UIPATH_ORCH_URL}",
                     orchestratorTenant: "${UIPATH_ORCH_TENANT_NAME}",
                     folderName: "${UIPATH_ORCH_FOLDER_NAME}",
-                    environments: 'DEV',  // Orchestrator environment
+                    environments: 'DEV', // change to your environment if needed
                     credentials: Token(accountName: "${UIPATH_ORCH_LOGICAL_NAME}", credentialsId: 'APIUserKey'),
                     traceLevel: 'None',
-                    entryPointPaths: 'Main.xaml'
+                    entryPointPaths: 'Main.xaml',
+                    createProcess: true
                 )
             }
         }
 
-        // Deploy to Production (optional)
         stage('Deploy to Production') {
             steps {
                 echo "Deploy to Production (if needed)"
@@ -79,19 +68,17 @@ pipeline {
         }
     }
 
-    // Options
     options {
         timeout(time: 80, unit: 'MINUTES')
         skipDefaultCheckout()
     }
 
-    // Post actions
     post {
         success {
             echo "✅ Deployment completed successfully!"
         }
         failure {
-            echo "❌ FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]'"
+            echo "❌ FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.JOB_DISPLAY_URL})"
         }
         always {
             cleanWs()
