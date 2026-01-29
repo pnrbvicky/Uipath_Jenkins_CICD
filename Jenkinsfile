@@ -25,15 +25,14 @@ pipeline {
         stage('Build') {
             steps {
                 script {
-                    // Create a unique version using BUILD_NUMBER + timestamp
-                    def timestamp = new Date().format("yyyyMMddHHmmss")
-                    env.UNIQUE_VERSION = "${MAJOR}.${MINOR}.${env.BUILD_NUMBER}.${timestamp}"
-                    echo "Building project with version: ${env.UNIQUE_VERSION}"
+                    // Safe SemVer versioning: MAJOR.MINOR.BUILD_NUMBER
+                    env.PACKAGE_VERSION = "${MAJOR}.${MINOR}.${env.BUILD_NUMBER}"
+                    echo "Building project with version: ${env.PACKAGE_VERSION}"
 
                     UiPathPack(
                         outputPath: "Output\\${env.BUILD_NUMBER}",
                         projectJsonPath: "project.json",
-                        version: [$class: 'ManualVersionEntry', version: env.UNIQUE_VERSION],
+                        version: [$class: 'ManualVersionEntry', version: env.PACKAGE_VERSION],
                         useOrchestrator: false,
                         traceLevel: 'None'
                     )
@@ -61,7 +60,7 @@ pipeline {
                         createProcess: true,
                         traceLevel: 'None',
                         entryPointPaths: 'Main.xaml'
-                        // overwrite: true  // optional if you want to replace old package
+                        // overwrite: true  // Optional: replace old package if needed
                     )
                 }
             }
@@ -81,7 +80,7 @@ pipeline {
                         createProcess: true,
                         traceLevel: 'None',
                         entryPointPaths: 'Main.xaml'
-                        // overwrite: true  // optional
+                        // overwrite: true  // Optional
                     )
                 }
             }
