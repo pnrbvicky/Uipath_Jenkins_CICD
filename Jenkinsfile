@@ -8,7 +8,7 @@ pipeline {
 
         // UiPath Orchestrator
         UIPATH_ORCH_URL = 'https://cloud.uipath.com'
-        UIPATH_ORCH_TENANT = 'YOUR_TENANT_NAME'
+        UIPATH_ORCH_TENANT = 'DefaultTenant'
         UIPATH_FOLDER = 'UnAttended'
 
         // Jenkins Credential ID (UPDATED)
